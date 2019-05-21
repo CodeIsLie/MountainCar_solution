@@ -18,11 +18,6 @@ def init_utility(vel_bins, state_bins, min_value):
     return utility
 
 
-def calc_velocity(old_observation, new_observation):
-    sign = 1 if new_observation[0] - old_observation[0] > 0 else -1
-    speed = np.sqrt((new_observation[0] - old_observation[0]) ** 2 + (new_observation[1] - old_observation[1]) ** 2)
-    return sign * speed
-
 
 def save_policy_to_file(filename, policy):
     f = open(filename, 'w')
