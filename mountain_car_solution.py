@@ -27,9 +27,10 @@ def episode(env, render=False):
         previous_pose = observation
 
         observation, reward, done, info = env.step(action)
+        cumulative_reward += reward
         if done:
             break
-        cumulative_reward += reward
+
     return cumulative_reward
 
 
