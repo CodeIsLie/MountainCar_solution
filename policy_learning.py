@@ -13,10 +13,9 @@ def init_policy(vel_bins, state_bins):
     return policy.astype(np.int)
 
 
-def init_utility(vel_bins, state_bins, min_value):
-    utility = np.full((vel_bins, state_bins), min_value)
+def init_utility(vel_bins, state_bins, min_value, count_actions=3):
+    utility = np.full((vel_bins, state_bins, count_actions), min_value)
     return utility
-
 
 
 def save_policy_to_file(filename, policy):
@@ -45,29 +44,31 @@ def stochastic_improvement(policy, utility, velocity_state_array, position_state
 
     changed_state = None
     random_action = None
-    left_edge = len(position_state_array) * 0.25
+    old_action = None
+    left_edge = len(position_state_array) * 0.3
     right_edge = len(position_state_array) * 0.5
     trace = []
 
     # chaned_action =
     for t in range(1000):
         # env.render()
-        velocity = calc_velocity(previous_pose, observation)
+        velocity = observation[1]
         vel_ind = np.digitize(velocity, velocity_state_array)
-        pose_ind = np.digitize(previous_pose[0], position_state_array)
-        trace.append((vel_ind, pose_ind))
+        pose_ind = np.digitize(observation[0], position_state_array)
 
         if t == changed_action and (pose_ind < left_edge or pose_ind > right_edge):
             changed_state = vel_ind, pose_ind
-            if policy[vel_ind, pose_ind] == 0:
-                action = 1 + np.random.randint(0, 2)
-            elif policy[vel_ind, pose_ind] == 2:
-                action = np.random.randint(0, 2)
-            else:
-                action = np.random.randint(0, 3)
+            # if policy[vel_ind, pose_ind] == 0:
+            #     action = 1 + np.random.randint(0, 2)
+            # elif policy[vel_ind, pose_ind] == 2:
+            #     action = np.random.randint(0, 2)
+            # else:
+            action = np.random.randint(0, 3)
+            # old_action = policy[vel_ind, pose_ind]
             random_action = action
         else:
-            action = policy[vel_ind, pose_ind]
+            action = np.argmax(utility[vel_ind, pose_ind, :])
+        trace.append((vel_ind, pose_ind, action))
         # previous_action = action
         previous_pose = observation
 
@@ -76,24 +77,19 @@ def stochastic_improvement(policy, utility, velocity_state_array, position_state
         if done:
             if changed_state is None:
                 break
-            old_utility = utility[changed_state[0], changed_state[1]]
-            # if (changed_state[0] - len(velocity_state_array) // 2) < 2:
+            old_utility = utility[changed_state[0], changed_state[1], random_action]
+            # if old_utility == -200:
             #     break
-            if old_utility == -200:
-                for row, col in trace:
-                    utility[row, col] = max(cumulative_reward, utility[row, col])
-                break
+
             if old_utility < cumulative_reward:
                 print('improvement finded, improve by {}'
                       .format(cumulative_reward - old_utility))
                 print('before: {}\nafter: {}'.format(old_utility, cumulative_reward))
-                policy[changed_state[0], changed_state[1]] = random_action
-                for row, col in trace:
-                    utility[row, col] = cumulative_reward
+                utility[changed_state[0], changed_state[1], random_action] = cumulative_reward
+                for row, col, action in trace:
+                    utility[row, col, action] = max(utility[row, col, action], cumulative_reward)
             else:
                 pass
-                # for row, col in trace:
-                #     utility[row, col] = (1 - alpha) * utility[row, col] + alpha * cumulative_reward
             break
     return cumulative_reward
 
@@ -103,35 +99,37 @@ def policy_learn(env):
     position_bins = 30
     policy = init_policy(velocity_bins, position_bins)
     utility = init_utility(velocity_bins, position_bins, -200)
-    velocity_state_array = np.linspace(-0.8, 0.8, velocity_bins - 1)
+    velocity_state_array = np.linspace(-0.08, 0.08, velocity_bins - 1)
     position_state_array = np.linspace(-1.2, 0.5, position_bins - 1)
 
     epochs = 1000
     old_rewards = []
     trace = []
-    # print('start initiate filling of utility')
     alpha = 0.1
-    for _ in range(epochs):
+
+    print('start initiate filling of utility')
+    for t in range(epochs):
         observation = env.reset()
         cumulative_reward = 0
-        previous_action = 1
-        previous_pose = observation
+        if t % 100 == 0:
+            print('epoch {}'.format(t))
 
-        for t in range(1000):
-            velocity = calc_velocity(previous_pose, observation)
+        for _ in range(1000):
+            velocity = observation[1]
             vel_ind = np.digitize(velocity, velocity_state_array)
-            pose_ind = np.digitize(previous_pose[0], position_state_array)
-            trace.append((int(vel_ind), int(pose_ind)))
-            # policy[vel_ind, pose_ind] = action
+            pose_ind = np.digitize(observation[0], position_state_array)
             action = policy[vel_ind, pose_ind]
-            # previous_action = action
-            previous_pose = observation
+
+            trace.append((int(vel_ind), int(pose_ind), action))
 
             observation, reward, done, info = env.step(action)
             cumulative_reward += reward
             if done:
-                # for x, y in trace:
-                #     utility[x, y] = (1-alpha) * utility[x, y] + alpha * cumulative_reward
+                for x, y, action in trace:
+                    if utility[x, y, action] == -200:
+                        utility[x, y, action] = cumulative_reward
+                    else:
+                        utility[x, y, action] = (1-alpha) * utility[x, y, action] + alpha * cumulative_reward
                 break
         old_rewards.append(cumulative_reward)
 
@@ -145,26 +143,22 @@ def policy_learn(env):
     for t in range(epochs):
         observation = env.reset()
         cumulative_reward = 0
-        previous_pose = observation
 
         for _ in range(1000):
             if t < 15:
                 env.render()
-            velocity = calc_velocity(previous_pose, observation)
+            velocity = observation[1]
             vel_ind = np.digitize(velocity, velocity_state_array)
-            pose_ind = np.digitize(previous_pose[0], position_state_array)
+            pose_ind = np.digitize(observation[0], position_state_array)
             # trace.append((int(vel_ind), int(pose_ind)))
-            # policy[vel_ind, pose_ind] = action
-            action = policy[vel_ind, pose_ind]
-            # previous_action = action
-            previous_pose = observation
+            action = np.argmax(utility[vel_ind, pose_ind, :])
 
             observation, reward, done, info = env.step(action)
             cumulative_reward += reward
             if done:
                 break
         rewards.append(cumulative_reward)
-        if t < 15:
+        if t < 10:
             print('reward is {}'.format(cumulative_reward))
 
     print('average reward before learning: {}'.format(sum(old_rewards) / len(old_rewards)))
@@ -175,3 +169,5 @@ def policy_learn(env):
     save_policy_to_file('utility.txt', utility)
     save_policy_to_file('policy.txt', policy)
     env.close()
+
+    return policy

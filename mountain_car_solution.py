@@ -1,12 +1,14 @@
 import gym
 import numpy as np
-from policy_learning import init_policy
+from policy_learning import init_policy, policy_learn
 
 
 velocity_bins = 100
 position_bins = 30
+env = gym.make('MountainCar-v0')
 # используется стандартная policy, потому что как бы я не обучал модель, результаты в среднем не улучшались
-policy = init_policy(velocity_bins, position_bins)
+# policy = init_policy(velocity_bins, position_bins)
+policy = policy_learn(env)
 # utility = init_utility(velocity_bins, position_bins, -200)
 velocity_state_array = np.linspace(-0.08, 0.08, velocity_bins-1)
 position_state_array = np.linspace(-1.2, 0.5, position_bins-1)
@@ -35,9 +37,9 @@ def episode(env, render=False):
 
 
 def main():
-    env = gym.make('MountainCar-v0')
     result = episode(env, True)
     print('episode reward is {}'.format(result))
+    env.close()
 
 
 if __name__ == "__main__":
